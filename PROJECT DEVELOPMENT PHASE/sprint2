@@ -1,0 +1,113 @@
+#include <WiFi.h>
+#include<WiFiClient.h>
+#include<PubSubClient.h>
+
+float duration, distance;
+String status;
+String data3;
+void callback(char* subscribetopic, byte* payload, unsigned int payLoadLength);
+
+#define ORG "7qml3n"
+#define DEVICE_TYPE "IOT"
+#define DEVICE_ID "Waste_management"
+#define TOKEN "l4FVB93I&hZMANLp?D"
+
+// pin declaration
+#define LED 18
+#define BUZZER 23
+#define TRIG_PIN 13 // ESP32 pin GIOP23 connected to Ultrasonic Sensor's TRIG pin
+#define ECHO_PIN 12 // ESP32 pin GIOP22 connected to Ultrasonic Sensor's ECHO pin
+
+
+char server[] = ORG ".messaging.internetofthings.ibmcloud.com";// Server Name
+char publishTopic[] = "iot-2/evt/Data/fmt/json";// topic name and type of event perform and format in which data to be send
+char subscribetopic[] = "iot-2/cmd/command/fmt/String";// cmd  REPRESENT command type AND COMMAND IS TEST OF FORMAT STRING
+char authMethod[] = "use-token-auth";// authentication method
+char token[] = TOKEN;
+char clientId[] = "d:" ORG ":" DEVICE_TYPE ":" DEVICE_ID;//client id
+
+WiFiClient wifiClient;
+PubSubClient client(server, 1883, callback, wifiClient);
+
+void setup() {
+
+  Serial.begin(115200);
+  Serial.println();
+  pinMode(LED, OUTPUT);
+  // configure the trigger pin to output mode
+  pinMode(TRIG_PIN, OUTPUT);
+  // configure the echo pin to input mode
+  pinMode(ECHO_PIN, INPUT);
+  delay(10);
+  wifiConnect(); // to connect to wifi
+  mqttConnect(); // to connect to mqtt client
+}
+
+void loop() {
+ // generate 10-microsecond pulse to TRIG pin
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // measure duration of pulse from ECHO pin
+  duration = pulseIn(ECHO_PIN, HIGH);
+
+  // calculate the distance
+  distance = 0.017 * duration;
+
+  // print the value to Serial Monitor
+  Serial.print("distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+  if(distance>300)
+  {
+    status = "\"alert\"";
+  }
+  else 
+  {
+    status = "\"normal\"";
+  }
+  publishData(status, distance);
+  delay(2000);
+  if (!client.loop()) 
+  {
+    mqttConnect();
+  }
+}
+void wifiConnect() {
+  Serial.println();
+  Serial.print("Connecting to ");
+
+  WiFi.begin("Wokwi-GUEST", "", 6);//passing the wifi credentials to establish the connection
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+void mqttConnect() {
+  if (!client.connected()) 
+  {
+    Serial.print("Reconnecting client to ");
+    Serial.println(server);
+    while (!!!client.connect(clientId, authMethod, token)) 
+    {
+      Serial.print(".");
+      delay(500);
+    }
+    initManagedDevice();
+     Serial.println("Connected\n");
+  }
+}
+void initManagedDevice() {
+  if (client.subscribe(subscribetopic)) {
+    Serial.println("Subscribe to cmd OK");
+  }
+  else {
+    Serial.println("Subscribe to cmd FAILED");
+  }
+}
